@@ -139,17 +139,24 @@ Thanks goes to these amazing people:
 	<tbody>
 		<tr>
             <td align="center">
-        <a href="https://github.com/paultracer">
-            <img src="https://avatars.githubusercontent.com/u/214484440?v=4" width="100;" alt="paultracer"/>
+        <a href="https://github.com/anandgupta1202">
+            <img src="https://avatars.githubusercontent.com/u/39819996?v=4" width="100;" alt="anandgupta1202"/>
             <br />
-            <sub><b>paultracer</b></sub>
+            <sub><b>anandgupta1202</b></sub>
         </a>
     </td>
             <td align="center">
-        <a href="https://github.com/davincios">
-            <img src="https://avatars.githubusercontent.com/u/33206282?v=4" width="100;" alt="davincios"/>
+        <a href="https://github.com/yeoreums">
+            <img src="https://avatars.githubusercontent.com/u/62932875?v=4" width="100;" alt="yeoreums"/>
             <br />
-            <sub><b>davincios</b></sub>
+            <sub><b>yeoreums</b></sub>
+        </a>
+    </td>
+            <td align="center">
+        <a href="https://github.com/w3joe">
+            <img src="https://avatars.githubusercontent.com/u/84664178?v=4" width="100;" alt="w3joe"/>
+            <br />
+            <sub><b>w3joe</b></sub>
         </a>
     </td>
             <td align="center">
@@ -160,36 +167,6 @@ Thanks goes to these amazing people:
         </a>
     </td>
             <td align="center">
-        <a href="https://github.com/VaibhavUpreti">
-            <img src="https://avatars.githubusercontent.com/u/85568177?v=4" width="100;" alt="VaibhavUpreti"/>
-            <br />
-            <sub><b>VaibhavUpreti</b></sub>
-        </a>
-    </td>
-            <td align="center">
-        <a href="https://github.com/anandgupta1202">
-            <img src="https://avatars.githubusercontent.com/u/39819996?v=4" width="100;" alt="anandgupta1202"/>
-            <br />
-            <sub><b>anandgupta1202</b></sub>
-        </a>
-    </td>
-            <td align="center">
-        <a href="https://github.com/w3joe">
-            <img src="https://avatars.githubusercontent.com/u/84664178?v=4" width="100;" alt="w3joe"/>
-            <br />
-            <sub><b>w3joe</b></sub>
-        </a>
-    </td>
-		</tr>
-		<tr>
-            <td align="center">
-        <a href="https://github.com/yeoreums">
-            <img src="https://avatars.githubusercontent.com/u/62932875?v=4" width="100;" alt="yeoreums"/>
-            <br />
-            <sub><b>yeoreums</b></sub>
-        </a>
-    </td>
-            <td align="center">
         <a href="https://github.com/zeel2104">
             <img src="https://avatars.githubusercontent.com/u/72783325?v=4" width="100;" alt="zeel2104"/>
             <br />
@@ -197,12 +174,14 @@ Thanks goes to these amazing people:
         </a>
     </td>
             <td align="center">
-        <a href="https://github.com/aliya-tracer">
-            <img src="https://avatars.githubusercontent.com/u/233726347?v=4" width="100;" alt="aliya-tracer"/>
+        <a href="https://github.com/paultracer">
+            <img src="https://avatars.githubusercontent.com/u/214484440?v=4" width="100;" alt="paultracer"/>
             <br />
-            <sub><b>aliya-tracer</b></sub>
+            <sub><b>paultracer</b></sub>
         </a>
     </td>
+		</tr>
+		<tr>
             <td align="center">
         <a href="https://github.com/kylie-tracer">
             <img src="https://avatars.githubusercontent.com/u/256781109?v=4" width="100;" alt="kylie-tracer"/>
@@ -215,6 +194,27 @@ Thanks goes to these amazing people:
             <img src="https://avatars.githubusercontent.com/u/203629234?v=4" width="100;" alt="arnetracer"/>
             <br />
             <sub><b>arnetracer</b></sub>
+        </a>
+    </td>
+            <td align="center">
+        <a href="https://github.com/aliya-tracer">
+            <img src="https://avatars.githubusercontent.com/u/233726347?v=4" width="100;" alt="aliya-tracer"/>
+            <br />
+            <sub><b>aliya-tracer</b></sub>
+        </a>
+    </td>
+            <td align="center">
+        <a href="https://github.com/VaibhavUpreti">
+            <img src="https://avatars.githubusercontent.com/u/85568177?v=4" width="100;" alt="VaibhavUpreti"/>
+            <br />
+            <sub><b>VaibhavUpreti</b></sub>
+        </a>
+    </td>
+            <td align="center">
+        <a href="https://github.com/davincios">
+            <img src="https://avatars.githubusercontent.com/u/33206282?v=4" width="100;" alt="davincios"/>
+            <br />
+            <sub><b>davincios</b></sub>
         </a>
     </td>
 		</tr>
