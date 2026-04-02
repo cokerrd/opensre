@@ -30,6 +30,26 @@
 
 ---
 
+## Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Tracer-Cloud/opensre/main/install.sh | bash
+```
+
+```bash
+brew install Tracer-Cloud/opensre/opensre
+```
+
+```powershell
+irm https://raw.githubusercontent.com/Tracer-Cloud/opensre/main/install.ps1 | iex
+```
+
+```bash
+pipx install opensre
+```
+
+---
+
 ## Quick Start
 
 > **New to Tracer?** See [SETUP.md](SETUP.md) for detailed platform-specific setup instructions, including Windows setup, environment configuration, and more.
