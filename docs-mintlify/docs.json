@@ -1,5 +1,5 @@
 {
-  "$schema": "https://docs.tracer.cloud/docs.json",
+  "$schema": "https://opensre.com/docs.json",
   "theme": "maple",
   "name": "Tracer Documentation",
   "modeToggle": {

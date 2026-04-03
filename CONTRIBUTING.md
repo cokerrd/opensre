@@ -6,7 +6,7 @@ This document describes how to set up your environment, propose changes, report 
 
 ## Quick Links
 
-- **Docs:** https://www.tracer.cloud/docs
+- **Docs:** https://opensre.com
 - **Support / Contact:** hello@tracer.cloud
 - **Security Issues:** See `SECURITY.md` (do not open public issues)
 

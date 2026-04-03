@@ -8,7 +8,6 @@
 
 <p>The open-source framework for AI SRE agents, and the training and evaluation environment they need to improve. Connect the tools you already run, define your own workflows, and investigate incidents on your own infrastructure.</p>
 
-
 <p>
   <a href="https://github.com/Tracer-Cloud/opensre/stargazers"><img src="https://img.shields.io/github/stars/Tracer-Cloud/opensre?style=flat-square&color=FF6B00" alt="Stars"></a>
   <a href="https://github.com/Tracer-Cloud/opensre/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square" alt="License"></a>
@@ -21,7 +20,7 @@
     <a href="https://tracer-cloud.slack.com/archives/C0AL8S64936">Slack</a> ·
     <a href="https://app.tracer.cloud/">Getting Started</a> ·
     <a href="https://tracer.cloud/">Tracer Agent</a> ·
-    <a href="https://tracer.cloud/docs/">Docs</a> ·
+    <a href="https://opensre.com/">Docs</a> ·
     <a href="docs/FAQ.md">FAQ</a> ·
     <a href="https://trust.tracer.cloud/">Security</a>
   </strong>
@@ -43,8 +42,8 @@ OpenSRE is building _that_ missing layer:
 
 > an open reinforcement learning environment for agentic infrastructure incident response, with end-to-end tests and synthetic incident simulations for realistic production failures
 
-
 We do that by:
+
 - building easy-to-deploy, customizable AI SRE agents for production incident investigation and response
 - running scored synthetic RCA suites that check root-cause accuracy, required evidence, and adversarial red herrings [(tests/synthetic)](tests/synthetic/rds_postgres)
 - running real-world end-to-end tests across cloud-backed scenarios including Kubernetes, EC2, CloudWatch, Lambda, ECS Fargate, and Flink [(tests/e2e)](tests/e2e)
@@ -134,13 +133,13 @@ When an alert fires, Tracer automatically:
 
 Tracer integrates with the systems that power modern cloud platforms.
 
-| Category           | Integrations                                                                                                                                                                                                                                                   |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Data Platform**  | Apache Airflow · Apache Kafka · Apache Spark                                                                                                                                                                                                                   |
+| Category           | Integrations                                                                                                                                                                                                                                                                           |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Data Platform**  | Apache Airflow · Apache Kafka · Apache Spark                                                                                                                                                                                                                                           |
 | **Observability**  | <img src="docs/assets/icons/grafana.webp" width="16"> Grafana · <img src="docs/assets/icons/datadog.svg" width="16"> Datadog · Honeycomb · Coralogix · <img src="docs/assets/icons/cloudwatch.png" width="16"> CloudWatch · <img src="docs/assets/icons/sentry.png" width="16"> Sentry |
-| **Infrastructure** | <img src="docs/assets/icons/kubernetes.png" width="16"> Kubernetes · <img src="docs/assets/icons/aws.png" width="16"> AWS · <img src="docs/assets/icons/gcp.jpg" width="16"> GCP · <img src="docs/assets/icons/azure.png" width="16"> Azure                    |
-| **Dev Tools**      | <img src="docs/assets/icons/github.webp" width="16"> GitHub                                                                                                                                                                                                    |
-| **Communication**  | <img src="docs/assets/icons/slack.png" width="16"> Slack · <img src="docs/assets/icons/pagerduty.png" width="16"> PagerDuty · Google Docs                                                                                                                             |
+| **Infrastructure** | <img src="docs/assets/icons/kubernetes.png" width="16"> Kubernetes · <img src="docs/assets/icons/aws.png" width="16"> AWS · <img src="docs/assets/icons/gcp.jpg" width="16"> GCP · <img src="docs/assets/icons/azure.png" width="16"> Azure                                            |
+| **Dev Tools**      | <img src="docs/assets/icons/github.webp" width="16"> GitHub                                                                                                                                                                                                                            |
+| **Communication**  | <img src="docs/assets/icons/slack.png" width="16"> Slack · <img src="docs/assets/icons/pagerduty.png" width="16"> PagerDuty · Google Docs                                                                                                                                              |
 
 ---
 
@@ -356,5 +355,5 @@ export OPENSRE_TELEMETRY_DEBUG=1
 Apache 2.0 - see [LICENSE](LICENSE) for details.
 
 ## Citations
-<sup>1</sup> https://arxiv.org/abs/2310.06770
 
+<sup>1</sup> https://arxiv.org/abs/2310.06770
