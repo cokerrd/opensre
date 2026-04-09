@@ -88,7 +88,7 @@ opensre update
 
 ## Development
 
-> **New to Tracer?** See [SETUP.md](SETUP.md) for detailed platform-specific setup instructions, including Windows setup, environment configuration, and more.
+> **New to OpenSRE?** See [SETUP.md](SETUP.md) for detailed platform-specific setup instructions, including Windows setup, environment configuration, and more.
 
 ```bash
 git clone https://github.com/Tracer-Cloud/opensre
@@ -108,7 +108,7 @@ opensre investigate -i tests/e2e/kubernetes/fixtures/datadog_k8s_alert.json
 
 ### Investigation Workflow
 
-When an alert fires, Tracer automatically:
+When an alert fires, OpenSRE automatically:
 
 1. **Fetches** the alert context and correlated logs, metrics, and traces
 2. **Reasons** across your connected systems to identify anomalies
@@ -137,7 +137,7 @@ _No benchmark results yet. Run `make benchmark` to generate._
 |                                          |                                                                                  |
 | ---------------------------------------- | -------------------------------------------------------------------------------- |
 | 🔍 **Structured incident investigation** | Correlated root-cause analysis across all your signals                           |
-| 📋 **Runbook-aware reasoning**           | Tracer reads your runbooks and applies them automatically                        |
+| 📋 **Runbook-aware reasoning**           | OpenSRE reads your runbooks and applies them automatically                       |
 | 🔮 **Predictive failure detection**      | Catch emerging issues before they page you                                       |
 | 🔗 **Evidence-backed root cause**        | Every conclusion is linked to the data behind it                                 |
 | 🤖 **Full LLM flexibility**              | Bring your own model — Anthropic, OpenAI, Ollama, Gemini, OpenRouter, NVIDIA NIM |
@@ -165,7 +165,7 @@ OpenSRE connects to 40+ tools and services across the modern cloud stack, from L
 
 ## Contributing
 
-Tracer is community-built. Every integration, improvement, and bug fix makes it better for thousands of engineers. We actively review PRs and welcome contributors of all experience levels.
+OpenSRE is community-built. Every integration, improvement, and bug fix makes it better for thousands of engineers. We actively review PRs and welcome contributors of all experience levels.
 
 <p>
   <a href="https://discord.gg/7NTpevXf7w">
@@ -178,7 +178,7 @@ Good first issues are labeled [`good first issue`](https://github.com/Tracer-Clo
 - 🐛 Report bugs or missing edge cases
 - 🔌 Add a new tool integration
 - 📖 Improve documentation or runbook examples
-- ⭐ Star the repo - it helps other engineers find Tracer
+- ⭐ Star the repo - it helps other engineers find OpenSRE
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide.
 
