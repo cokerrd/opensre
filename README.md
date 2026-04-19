@@ -603,6 +603,13 @@ Thanks goes to these amazing people:
             <sub><b>chaosreload</b></sub>
         </a>
     </td>
+            <td align="center">
+        <a href="https://github.com/paulovitorcl">
+            <img src="https://avatars.githubusercontent.com/u/47778440?v=4" width="100" alt="paulovitorcl"/>
+            <br />
+            <sub><b>paulovitorcl</b></sub>
+        </a>
+    </td>
 		</tr>
 	</tbody>
 </table>
