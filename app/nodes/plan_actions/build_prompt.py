@@ -104,7 +104,7 @@ def _build_available_sources_hint(available_sources: dict[str, dict]) -> str:
             f"""{grafana_label} Available:
 - Service Name: {grafana.get("service_name")}
 - Pipeline: {grafana.get("pipeline_name")}
-- Use query_grafana_logs to search Loki for pipeline errors{traces_hint}
+- Use query_grafana_logs to search Loki for pipeline errors, or to fetch AWS Performance Insights and RDS events for database diagnostics{traces_hint}
 - Use query_grafana_alert_rules to inspect alert configuration"""
         )
 
