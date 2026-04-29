@@ -1,7 +1,7 @@
 <div align="center">
 
 <p align="center">
-  <img src="docs/logo/opensre-logomark-full.svg" alt="OpenSRE" width="360" />
+  <img src="docs/logo/opensre-logo-white.svg" alt="OpenSRE" width="360" />
 </p>
 
 <h1>OpenSRE: Build Your Own AI SRE Agents</h1>
@@ -197,7 +197,12 @@ If you use VS Code, the repo now includes a ready-to-use devcontainer under [`.d
 
 ## How OpenSRE Works
 
-<img src="https://github.com/user-attachments/assets/04234934-c603-491e-a08f-b145d1158d7a" width="1064" alt="opensre-how-it-works" style="border-radius: 0" />
+<img 
+  src="https://github.com/user-attachments/assets/936ab1f2-9bda-438d-9897-e8e9cd98e335" 
+  width="1064" 
+  height="568" 
+  alt="opensre-how-it-works-github" 
+/>
 
 ### Investigation Workflow
 
