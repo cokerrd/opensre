@@ -31,7 +31,7 @@ Use `binary_resolver.resolve_cli_binary(...)` so all adapters share the same beh
 
 Resolution order:
 
-1. Explicit binary env var (for Codex: `CODEX_BIN`) **only if it points to a runnable file**.
+1. Explicit binary env var (`<PROVIDER>_BIN`, e.g. Codex `CODEX_BIN`) **only if it points to a runnable file**.
 2. `shutil.which(...)` lookups for platform-specific binary names.
 3. Fallback install locations from `default_cli_fallback_paths(...)`.
 
@@ -46,7 +46,20 @@ Notes:
 - **No TTY**: invocation must be suitable for `subprocess.run` without an interactive session.
 - **Probe vs run**: `detect()` is cheap; `CLIBackedLLMClient.invoke` probes again before exec so missing auth fails fast with a clear error.
 - **Structured output**: `CLIBackedLLMClient.with_structured_output` delegates to `StructuredOutputClient` (JSON-in-prompt), same pattern as API clients.
-- **Optional model envs**: provider model env vars (for Codex: `CODEX_MODEL`) should be optional; if unset, rely on vendor CLI defaults.
+- **Optional model envs**: use `<PROVIDER>_MODEL` (see [Per-provider env vars](#per-provider-env-vars-required-for-every-new-cli)); always optional—if unset, rely on vendor CLI defaults.
+
+## Per-provider env vars (required for every new CLI)
+
+**Codex is the reference.** Every subprocess LLM must expose the same *shape* of knobs:
+
+| Env var | Role |
+| ------- | ---- |
+| `<PROVIDER>_BIN` | Optional explicit path to the vendor executable. Pass the same name as `explicit_env_key` to `resolve_cli_binary(...)`. Missing, blank, or invalid paths are ignored; PATH + fallbacks still run. |
+| `<PROVIDER>_MODEL` | Optional model override. Register as `model_env_key` on `CLIProviderRegistration` in `registry.py`. Empty or unset → runner omits the flag and the CLI uses its default. |
+
+**Naming:** derive `<PROVIDER>` from the registry / `LLM_PROVIDER` string: **uppercase**, then `_BIN` / `_MODEL`. Examples: `codex` → `CODEX_BIN`, `CODEX_MODEL`; a future `gemini` → `GEMINI_BIN`, `GEMINI_MODEL`.
+
+Document both vars in the adapter module docstring or a one-line comment near `binary_env_key` / the registration entry so users and wizard copy stay aligned.
 
 ## Auth probe pattern
 
@@ -90,7 +103,7 @@ Order in `CodexAdapter._resolve_binary` (now delegated to shared resolver helper
 2. `shutil.which("codex")` (and Windows `codex.cmd` / `codex.ps1`).
 3. `_fallback_codex_paths()` — conventional install locations; invalid or blank `CODEX_BIN` is ignored so PATH/fallbacks still apply.
 
-## Codex env quick reference
+## Codex env quick reference (instance of the convention above)
 
 All optional:
 
@@ -105,7 +118,7 @@ CODEX_BIN=
 ## Provider checklist (copy/paste)
 
 - Add adapter in `app/integrations/llm_cli/`.
-- Reuse `resolve_cli_binary(...)` for `_resolve_binary`.
+- Define `<PROVIDER>_BIN` + `<PROVIDER>_MODEL` per [Per-provider env vars](#per-provider-env-vars-required-for-every-new-cli); reuse `resolve_cli_binary(..., explicit_env_key=...)` for `_resolve_binary`.
 - Implement `detect()` with `--version` + auth status checks; follow the three-state `logged_in` pattern above.
 - Write `_classify_<name>_auth` — test against a real logged-in **and** logged-out session before merging.
 - If the CLI reads custom env vars (e.g. `CLAUDE_*`), add the prefix to `_SAFE_SUBPROCESS_ENV_PREFIXES` in `runner.py`.
