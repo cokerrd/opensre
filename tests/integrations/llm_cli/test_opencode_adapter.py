@@ -1,0 +1,573 @@
+"""Tests for the OpenCode CLI adapter (detect / build / failure / auth detection / fallback paths)."""
+
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+from app.integrations.llm_cli.binary_resolver import npm_prefix_bin_dirs
+from app.integrations.llm_cli.opencode import (
+    OpenCodeAdapter,
+    _classify_opencode_auth,
+    _fallback_opencode_paths,
+    _get_opencode_creds_path,
+)
+
+
+def _posix_path_set(paths: list[str]) -> set[str]:
+    """Normalize paths for cross-platform assertions (Windows backslashes -> forward slashes)."""
+    return {Path(p).as_posix() for p in paths}
+
+
+# ---------------------------------------------------------------------------
+# Credentials path tests (same XDG path on all OSes)
+# ---------------------------------------------------------------------------
+
+
+def test_get_creds_path_respects_xdg_data_home() -> None:
+    """Should use XDG_DATA_HOME when set (universal across all OSes)."""
+    with patch.dict(os.environ, {"XDG_DATA_HOME": "/custom/xdg/data"}, clear=False):
+        path = _get_opencode_creds_path()
+
+    assert path == Path("/custom/xdg/data/opencode/auth.json")
+
+
+def test_get_creds_path_default() -> None:
+    """Should default to ~/.local/share/opencode/auth.json on all platforms."""
+    with patch.dict(os.environ, {}, clear=False):
+        path = _get_opencode_creds_path()
+
+    # Path.home() works cross-platform: Linux/macOS -> /home/user, Windows -> C:\Users\User
+    assert path == Path.home() / ".local" / "share" / "opencode" / "auth.json"
+
+
+# ---------------------------------------------------------------------------
+# Auth classification tests
+# ---------------------------------------------------------------------------
+
+
+def test_classify_auth_with_valid_credentials(tmp_path: Path) -> None:
+    """Should return True when auth.json has valid provider credentials."""
+    creds_path = tmp_path / ".local" / "share" / "opencode" / "auth.json"
+    creds_path.parent.mkdir(parents=True, exist_ok=True)
+
+    auth_data = {
+        "anthropic": {"type": "api", "key": "sk-ant-real-key-12345"},
+        "openai": {"type": "api", "key": "sk-proj-real-key-67890"},
+    }
+    creds_path.write_text(json.dumps(auth_data))
+
+    with patch(
+        "app.integrations.llm_cli.opencode._get_opencode_creds_path", return_value=creds_path
+    ):
+        logged_in, detail = _classify_opencode_auth()
+
+    assert logged_in is True
+    assert "Authenticated" in detail
+
+
+def test_classify_auth_with_single_provider(tmp_path: Path) -> None:
+    """Should return True when auth.json has at least one valid provider."""
+    creds_path = tmp_path / ".local" / "share" / "opencode" / "auth.json"
+    creds_path.parent.mkdir(parents=True, exist_ok=True)
+
+    auth_data = {"anthropic": {"type": "api", "key": "sk-ant-real-key-12345"}}
+    creds_path.write_text(json.dumps(auth_data))
+
+    with patch(
+        "app.integrations.llm_cli.opencode._get_opencode_creds_path", return_value=creds_path
+    ):
+        logged_in, detail = _classify_opencode_auth()
+
+    assert logged_in is True
+    assert "Authenticated" in detail
+
+
+def test_classify_auth_with_no_credentials_file(tmp_path: Path) -> None:
+    """Should return False when auth.json doesn't exist."""
+    creds_path = tmp_path / ".local" / "share" / "opencode" / "auth.json"
+
+    with patch(
+        "app.integrations.llm_cli.opencode._get_opencode_creds_path", return_value=creds_path
+    ):
+        logged_in, detail = _classify_opencode_auth()
+
+    assert logged_in is False
+    assert "Not authenticated" in detail
+
+
+def test_classify_auth_with_empty_credentials(tmp_path: Path) -> None:
+    """Should return False when auth.json exists but has no keys."""
+    creds_path = tmp_path / ".local" / "share" / "opencode" / "auth.json"
+    creds_path.parent.mkdir(parents=True, exist_ok=True)
+    creds_path.write_text(json.dumps({}))
+
+    with patch(
+        "app.integrations.llm_cli.opencode._get_opencode_creds_path", return_value=creds_path
+    ):
+        logged_in, detail = _classify_opencode_auth()
+
+    assert logged_in is False
+    assert "No valid credentials" in detail
+
+
+def test_classify_auth_with_empty_key_values(tmp_path: Path) -> None:
+    """Should return False when keys exist but are empty strings."""
+    creds_path = tmp_path / ".local" / "share" / "opencode" / "auth.json"
+    creds_path.parent.mkdir(parents=True, exist_ok=True)
+
+    auth_data = {"anthropic": {"type": "api", "key": ""}, "openai": {"type": "api", "key": ""}}
+    creds_path.write_text(json.dumps(auth_data))
+
+    with patch(
+        "app.integrations.llm_cli.opencode._get_opencode_creds_path", return_value=creds_path
+    ):
+        logged_in, detail = _classify_opencode_auth()
+
+    assert logged_in is False
+    assert "No valid credentials" in detail
+
+
+def test_classify_auth_with_malformed_json(tmp_path: Path) -> None:
+    """Should return None when auth.json is corrupted (unclear auth state)."""
+    creds_path = tmp_path / ".local" / "share" / "opencode" / "auth.json"
+    creds_path.parent.mkdir(parents=True, exist_ok=True)
+    creds_path.write_text("{invalid json}")
+
+    with patch(
+        "app.integrations.llm_cli.opencode._get_opencode_creds_path", return_value=creds_path
+    ):
+        logged_in, detail = _classify_opencode_auth()
+
+    assert logged_in is None
+    assert "Could not read" in detail
+
+
+# ---------------------------------------------------------------------------
+# detect() tests
+# ---------------------------------------------------------------------------
+
+
+def _version_proc() -> MagicMock:
+    """Mock successful version command response."""
+    m = MagicMock()
+    m.returncode = 0
+    m.stdout = "opencode 1.2.3\n"
+    m.stderr = ""
+    return m
+
+
+@patch("app.integrations.llm_cli.opencode.subprocess.run")
+@patch("app.integrations.llm_cli.binary_resolver.shutil.which")
+def test_detect_installed_and_authenticated(mock_which: MagicMock, mock_run: MagicMock) -> None:
+    """Should detect installed binary and authenticated user."""
+    mock_which.return_value = "/usr/bin/opencode"
+    mock_run.return_value = _version_proc()
+
+    with patch(
+        "app.integrations.llm_cli.opencode._classify_opencode_auth",
+        return_value=(True, "Authenticated"),
+    ):
+        probe = OpenCodeAdapter().detect()
+
+    assert probe.installed is True
+    assert probe.logged_in is True
+    assert probe.bin_path == "/usr/bin/opencode"
+    assert probe.version == "1.2.3"
+
+
+@patch("app.integrations.llm_cli.opencode.subprocess.run")
+@patch("app.integrations.llm_cli.binary_resolver.shutil.which")
+def test_detect_installed_not_authenticated(mock_which: MagicMock, mock_run: MagicMock) -> None:
+    """Should detect installed binary but user not authenticated."""
+    mock_which.return_value = "/usr/bin/opencode"
+    mock_run.return_value = _version_proc()
+
+    with patch(
+        "app.integrations.llm_cli.opencode._classify_opencode_auth",
+        return_value=(False, "Not authenticated"),
+    ):
+        probe = OpenCodeAdapter().detect()
+
+    assert probe.installed is True
+    assert probe.logged_in is False
+
+
+@patch("app.integrations.llm_cli.opencode._fallback_opencode_paths", return_value=[])
+@patch("app.integrations.llm_cli.binary_resolver.shutil.which", return_value=None)
+def test_detect_not_installed(mock_which: MagicMock, mock_fallback: MagicMock) -> None:
+    """Should detect that binary is not installed."""
+    probe = OpenCodeAdapter().detect()
+
+    assert probe.installed is False
+    assert probe.logged_in is None
+    assert probe.bin_path is None
+    assert "not found" in probe.detail.lower()
+
+
+@patch("app.integrations.llm_cli.opencode.subprocess.run")
+@patch("app.integrations.llm_cli.binary_resolver.shutil.which")
+def test_detect_version_command_fails(mock_which: MagicMock, mock_run: MagicMock) -> None:
+    """Should return installed=False when version command fails."""
+    mock_which.return_value = "/usr/bin/opencode"
+    m = MagicMock()
+    m.returncode = 1
+    m.stdout = ""
+    m.stderr = "some error\n"
+    mock_run.return_value = m
+
+    probe = OpenCodeAdapter().detect()
+
+    assert probe.installed is False
+    assert probe.logged_in is None
+
+
+@patch("app.integrations.llm_cli.opencode.subprocess.run")
+@patch("app.integrations.llm_cli.binary_resolver.shutil.which")
+def test_detect_version_os_error(mock_which: MagicMock, mock_run: MagicMock) -> None:
+    """Should handle OSError when running version command."""
+    mock_which.return_value = "/usr/bin/opencode"
+    mock_run.side_effect = OSError("not found")
+
+    probe = OpenCodeAdapter().detect()
+
+    assert probe.installed is False
+    assert probe.logged_in is None
+
+
+@patch("app.integrations.llm_cli.opencode.subprocess.run")
+@patch("app.integrations.llm_cli.binary_resolver.shutil.which")
+def test_detect_version_timeout_expired(mock_which: MagicMock, mock_run: MagicMock) -> None:
+    """Should handle timeout when version command hangs."""
+    import subprocess
+
+    mock_which.return_value = "/usr/bin/opencode"
+    mock_run.side_effect = subprocess.TimeoutExpired(
+        cmd=["/usr/bin/opencode", "--version"], timeout=8.0
+    )
+
+    probe = OpenCodeAdapter().detect()
+
+    assert probe.installed is False
+    assert probe.logged_in is None
+    assert probe.bin_path is None
+    assert "could not run" in probe.detail.lower()
+    assert "--version" in probe.detail
+
+
+# ---------------------------------------------------------------------------
+# build() tests
+# ---------------------------------------------------------------------------
+
+
+@patch("app.integrations.llm_cli.binary_resolver.shutil.which", return_value="/usr/bin/opencode")
+def test_build_basic_invocation(mock_which: MagicMock) -> None:
+    """Should build correct basic command without model flag."""
+    inv = OpenCodeAdapter().build(prompt="explain this alert", model=None, workspace="")
+
+    assert inv.argv[0] == "/usr/bin/opencode"
+    assert "run" in inv.argv
+    assert inv.stdin == "explain this alert"
+    assert inv.timeout_sec == 120.0
+
+
+@patch("app.integrations.llm_cli.binary_resolver.shutil.which", return_value="/usr/bin/opencode")
+def test_build_adds_model_flag(mock_which: MagicMock) -> None:
+    """Should add -m flag when model is provided."""
+    inv = OpenCodeAdapter().build(prompt="p", model="openai/gpt-5.4-mini", workspace="")
+
+    assert "-m" in inv.argv
+    idx = inv.argv.index("-m")
+    assert inv.argv[idx + 1] == "openai/gpt-5.4-mini"
+
+
+@patch("app.integrations.llm_cli.binary_resolver.shutil.which", return_value="/usr/bin/opencode")
+def test_build_omits_model_flag_when_empty_string(mock_which: MagicMock) -> None:
+    """Should omit -m flag when model is empty string."""
+    inv = OpenCodeAdapter().build(prompt="p", model="", workspace="")
+    assert "-m" not in inv.argv
+
+
+@patch("app.integrations.llm_cli.binary_resolver.shutil.which", return_value="/usr/bin/opencode")
+def test_build_omits_model_flag_when_none(mock_which: MagicMock) -> None:
+    """Should omit -m flag when model is None."""
+    inv = OpenCodeAdapter().build(prompt="p", model=None, workspace="")
+    assert "-m" not in inv.argv
+
+
+@patch("app.integrations.llm_cli.binary_resolver.shutil.which", return_value="/usr/bin/opencode")
+def test_build_uses_provided_workspace(mock_which: MagicMock) -> None:
+    """Should use provided workspace as working directory."""
+    inv = OpenCodeAdapter().build(prompt="p", model=None, workspace="/my/project")
+    assert inv.cwd == "/my/project"
+
+
+@patch("app.integrations.llm_cli.binary_resolver.shutil.which", return_value="/usr/bin/opencode")
+def test_build_defaults_to_cwd_when_workspace_empty(mock_which: MagicMock) -> None:
+    """Should default to current working directory when workspace not provided."""
+    inv = OpenCodeAdapter().build(prompt="p", model=None, workspace="")
+    assert inv.cwd == os.getcwd()
+
+
+@patch("app.integrations.llm_cli.binary_resolver.shutil.which", return_value="/usr/bin/opencode")
+def test_build_sets_no_color_env(mock_which: MagicMock) -> None:
+    """Should set NO_COLOR=1 to disable ANSI colors."""
+    inv = OpenCodeAdapter().build(prompt="p", model=None, workspace="")
+    assert inv.env is not None
+    assert inv.env.get("NO_COLOR") == "1"
+
+
+@patch("app.integrations.llm_cli.binary_resolver.shutil.which", return_value="/usr/bin/opencode")
+def test_build_forwards_proxy_env_vars(mock_which: MagicMock) -> None:
+    """Should forward proxy environment variables to subprocess."""
+    with patch.dict(
+        os.environ,
+        {
+            "HTTP_PROXY": "http://proxy:8080",
+            "HTTPS_PROXY": "https://proxy:8080",
+            "NO_PROXY": "localhost,127.0.0.1",
+        },
+        clear=False,
+    ):
+        inv = OpenCodeAdapter().build(prompt="p", model=None, workspace="")
+
+    assert inv.env["HTTP_PROXY"] == "http://proxy:8080"
+    assert inv.env["HTTPS_PROXY"] == "https://proxy:8080"
+    assert inv.env["NO_PROXY"] == "localhost,127.0.0.1"
+
+
+@patch("app.integrations.llm_cli.opencode._fallback_opencode_paths", return_value=[])
+@patch("app.integrations.llm_cli.binary_resolver.shutil.which", return_value=None)
+def test_build_raises_when_binary_not_found(
+    mock_which: MagicMock, mock_fallback: MagicMock
+) -> None:
+    """Should raise RuntimeError when binary cannot be found."""
+    import pytest
+
+    with pytest.raises(RuntimeError, match="OpenCode CLI not found"):
+        OpenCodeAdapter().build(prompt="p", model=None, workspace="")
+
+
+# ---------------------------------------------------------------------------
+# parse() tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_returns_stripped_stdout() -> None:
+    """Should strip whitespace from stdout."""
+    adapter = OpenCodeAdapter()
+    result = adapter.parse(stdout="  hello world  \n", stderr="", returncode=0)
+    assert result == "hello world"
+
+
+def test_parse_handles_empty_stdout() -> None:
+    """Should return empty string when stdout is empty."""
+    adapter = OpenCodeAdapter()
+    result = adapter.parse(stdout="", stderr="", returncode=0)
+    assert result == ""
+
+
+def test_parse_ignores_stderr() -> None:
+    """Should ignore stderr content and only use stdout."""
+    adapter = OpenCodeAdapter()
+    result = adapter.parse(stdout="response", stderr="some logs", returncode=0)
+    assert result == "response"
+
+
+# ---------------------------------------------------------------------------
+# explain_failure() tests
+# ---------------------------------------------------------------------------
+
+
+def test_explain_failure_includes_returncode_and_stderr() -> None:
+    """Should include return code and stderr in error message."""
+    adapter = OpenCodeAdapter()
+    msg = adapter.explain_failure(stdout="", stderr="auth error", returncode=1)
+    assert "1" in msg
+    assert "auth error" in msg
+
+
+def test_explain_failure_falls_back_to_stdout() -> None:
+    """Should use stdout when stderr is empty."""
+    adapter = OpenCodeAdapter()
+    msg = adapter.explain_failure(stdout="some output", stderr="", returncode=2)
+    assert "some output" in msg
+
+
+def test_explain_failure_auth_error() -> None:
+    """Should provide helpful auth error message."""
+    adapter = OpenCodeAdapter()
+    msg = adapter.explain_failure(stdout="", stderr="not authenticated", returncode=1)
+    assert "Authentication failed" in msg
+    assert "opencode auth login" in msg
+
+
+def test_explain_failure_model_error() -> None:
+    """Should provide helpful model format error message."""
+    adapter = OpenCodeAdapter()
+    msg = adapter.explain_failure(stdout="", stderr="model not found", returncode=1)
+    assert "Model not found" in msg
+    assert "provider/model" in msg
+
+
+def test_explain_failure_rate_limit_error() -> None:
+    """Should provide helpful rate limit error message."""
+    adapter = OpenCodeAdapter()
+    msg = adapter.explain_failure(stdout="", stderr="rate limit exceeded", returncode=1)
+    assert "Rate limited" in msg
+
+
+# ---------------------------------------------------------------------------
+# OPENCODE_BIN env override tests
+# ---------------------------------------------------------------------------
+
+
+def test_detect_uses_opencode_bin_env(tmp_path: Path) -> None:
+    """Should respect OPENCODE_BIN environment variable."""
+    fake_bin = tmp_path / "my-opencode"
+    fake_bin.write_bytes(b"")
+    os.chmod(fake_bin, 0o700)
+
+    with (
+        patch.dict(os.environ, {"OPENCODE_BIN": str(fake_bin)}, clear=False),
+        patch("app.integrations.llm_cli.opencode.subprocess.run") as mock_run,
+    ):
+        mock_run.return_value = _version_proc()
+        with patch(
+            "app.integrations.llm_cli.opencode._classify_opencode_auth", return_value=(True, "ok")
+        ):
+            probe = OpenCodeAdapter().detect()
+
+    assert probe.bin_path == str(fake_bin)
+    assert probe.installed is True
+
+
+@patch("app.integrations.llm_cli.opencode.subprocess.run")
+@patch("app.integrations.llm_cli.binary_resolver.shutil.which")
+def test_detect_falls_back_when_bin_env_invalid(mock_which: MagicMock, mock_run: MagicMock) -> None:
+    """Should fall back to PATH search when OPENCODE_BIN points to invalid binary."""
+    mock_which.return_value = "/usr/bin/opencode"
+    mock_run.return_value = _version_proc()
+
+    with (
+        patch.dict(os.environ, {"OPENCODE_BIN": "/does/not/exist/opencode"}, clear=False),
+        patch(
+            "app.integrations.llm_cli.opencode._classify_opencode_auth", return_value=(True, "ok")
+        ),
+    ):
+        probe = OpenCodeAdapter().detect()
+
+    assert probe.bin_path == "/usr/bin/opencode"
+    assert probe.installed is True
+
+
+# ---------------------------------------------------------------------------
+# Fallback paths tests (binary resolution, NOT auth.json)
+# ---------------------------------------------------------------------------
+
+
+def test_fallback_paths_macos() -> None:
+    """Test binary search paths on macOS (Homebrew, local bins, etc.)."""
+    npm_prefix_bin_dirs.cache_clear()
+    with (
+        patch("app.integrations.llm_cli.binary_resolver.sys.platform", "darwin"),
+        patch.dict(os.environ, {}, clear=False),
+    ):
+        paths = _fallback_opencode_paths()
+
+    normalized = _posix_path_set(paths)
+    # Homebrew paths on Apple Silicon and Intel
+    assert "/opt/homebrew/bin/opencode" in normalized
+    assert "/usr/local/bin/opencode" in normalized
+    # User local bin
+    assert (Path.home() / ".local/bin/opencode").as_posix() in normalized
+    # npm global bins
+    assert (Path.home() / ".npm-global/bin/opencode").as_posix() in normalized
+    # Volta (Node version manager)
+    assert (Path.home() / ".volta/bin/opencode").as_posix() in normalized
+
+
+def test_fallback_paths_linux() -> None:
+    """Test binary search paths on Linux (npm prefixes, local bins)."""
+    npm_prefix_bin_dirs.cache_clear()
+    with (
+        patch("app.integrations.llm_cli.binary_resolver.sys.platform", "linux"),
+        patch.dict(os.environ, {"npm_config_prefix": "/custom/npm"}, clear=False),
+    ):
+        paths = _fallback_opencode_paths()
+
+    normalized = _posix_path_set(paths)
+    assert "/custom/npm/bin/opencode" in normalized
+    assert (Path.home() / ".local/bin/opencode").as_posix() in normalized
+    assert (Path.home() / ".npm-global/bin/opencode").as_posix() in normalized
+
+
+def test_fallback_paths_windows() -> None:
+    """Test binary search paths on Windows (npm, Scoop, local bins)."""
+    npm_prefix_bin_dirs.cache_clear()
+    with (
+        patch("app.integrations.llm_cli.binary_resolver.sys.platform", "win32"),
+        patch.dict(
+            os.environ,
+            {
+                "APPDATA": r"C:\Users\me\AppData\Roaming",
+                "LOCALAPPDATA": r"C:\Users\me\AppData\Local",
+            },
+            clear=False,
+        ),
+    ):
+        paths = _fallback_opencode_paths()
+
+    normalized = {p.replace("\\", "/") for p in paths}
+
+    # npm install locations (APPDATA)
+    assert "C:/Users/me/AppData/Roaming/npm/opencode.cmd" in normalized
+    assert "C:/Users/me/AppData/Roaming/npm/opencode.exe" in normalized
+    # Note: .ps1 and .bat are NOT added by default_cli_fallback_paths for npm
+
+    # Scoop install location (LOCALAPPDATA/Programs/opencode)
+    assert "C:/Users/me/AppData/Local/Programs/opencode/opencode.cmd" in normalized
+    assert "C:/Users/me/AppData/Local/Programs/opencode/opencode.exe" in normalized
+
+
+# ---------------------------------------------------------------------------
+# Registry test
+# ---------------------------------------------------------------------------
+
+
+def test_opencode_registry_entry() -> None:
+    """Should be properly registered in CLI provider registry."""
+    from app.integrations.llm_cli.registry import get_cli_provider_registration
+
+    reg = get_cli_provider_registration("opencode")
+    assert reg is not None
+    assert reg.model_env_key == "OPENCODE_MODEL"
+    assert reg.adapter_factory().name == "opencode"
+
+
+# ---------------------------------------------------------------------------
+# Integration: Config model options test
+# ---------------------------------------------------------------------------
+
+
+def test_opencode_model_options_in_wizard() -> None:
+    """Verify OpenCode model options are properly defined in wizard config."""
+    from app.cli.wizard.config import OPENCODE_MODELS, SUPPORTED_PROVIDERS
+
+    # Find OpenCode provider
+    opencode_provider = None
+    for provider in SUPPORTED_PROVIDERS:
+        if provider.value == "opencode":
+            opencode_provider = provider
+            break
+
+    assert opencode_provider is not None
+    assert opencode_provider.models == OPENCODE_MODELS
+    assert opencode_provider.model_env == "OPENCODE_MODEL"
+    assert opencode_provider.credential_kind == "cli"
+
+    # Check that first model option is empty string (CLI default)
+    assert OPENCODE_MODELS[0].value == ""
+    assert "CLI default" in OPENCODE_MODELS[0].label

@@ -29,10 +29,19 @@ def _claude_code_factory() -> LLMCLIAdapter:
     return ClaudeCodeAdapter()
 
 
+def _opencode_factory() -> LLMCLIAdapter:
+    from app.integrations.llm_cli.opencode import OpenCodeAdapter
+
+    return OpenCodeAdapter()
+
+
 CLI_PROVIDER_REGISTRY: dict[str, CLIProviderRegistration] = {
     "codex": CLIProviderRegistration(adapter_factory=_codex_factory, model_env_key="CODEX_MODEL"),
     "claude-code": CLIProviderRegistration(
         adapter_factory=_claude_code_factory, model_env_key="CLAUDE_CODE_MODEL"
+    ),
+    "opencode": CLIProviderRegistration(
+        adapter_factory=_opencode_factory, model_env_key="OPENCODE_MODEL"
     ),
 }
 
