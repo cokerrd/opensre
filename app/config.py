@@ -170,6 +170,7 @@ class LLMSettings(StrictConfigModel):
             "minimax",
             "codex",
             "claude-code",
+            "opencode",
         )
         if provider in valid_providers:
             return provider
