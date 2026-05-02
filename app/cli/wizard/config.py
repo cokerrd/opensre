@@ -173,7 +173,7 @@ OPENCODE_MODELS = (
         value="anthropic/claude-sonnet-4.6", label="Claude Sonnet 4.6 (via OpenCode) - balanced"
     ),
     ModelOption(
-        value="claude-haiku-4-5-20251001",
+        value="anthropic/claude-haiku-4-5-20251001",
         label="Claude Haiku 4.5 (via OpenCode)— fast, cost-efficient",
     ),
     ModelOption(value="openai/gpt-5.4", label="GPT-5.4 (via OpenCode)"),

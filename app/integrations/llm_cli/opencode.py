@@ -52,9 +52,7 @@ def _classify_opencode_auth() -> tuple[bool | None, str]:
                 if isinstance(data, dict):
                     # Check if any provider has a non-empty key field
                     has_credentials = any(
-                        isinstance(creds, dict)
-                        and creds.get("key", "").strip()
-                        and len(creds.get("key", "").strip()) > 0
+                        isinstance(creds, dict) and bool(creds.get("key", "").strip())
                         for creds in data.values()
                     )
 
