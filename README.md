@@ -1225,6 +1225,13 @@ Thanks goes to these amazing people:
             <sub><b>4arjun</b></sub>
         </a>
     </td>
+            <td align="center">
+        <a href="https://github.com/cloudenochcsis">
+            <img src="https://avatars.githubusercontent.com/u/155973884?v=4" width="100" alt="cloudenochcsis"/>
+            <br />
+            <sub><b>cloudenochcsis</b></sub>
+        </a>
+    </td>
 		</tr>
 	</tbody>
 </table>
