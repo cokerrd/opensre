@@ -167,7 +167,7 @@ OPENCODE_MODELS = (
         label="CLI default (no -m; use OpenCode configured model)",
     ),
     ModelOption(
-        value="anthropic/claude-opus-4.7", label="Claude Opus 4.7(via OpenCode) — most capable"
+        value="anthropic/claude-opus-4.7", label="Claude Opus 4.7 (via OpenCode) — most capable"
     ),
     ModelOption(
         value="anthropic/claude-sonnet-4.6", label="Claude Sonnet 4.6 (via OpenCode) - balanced"

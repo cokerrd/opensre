@@ -571,3 +571,71 @@ def test_opencode_model_options_in_wizard() -> None:
     # Check that first model option is empty string (CLI default)
     assert OPENCODE_MODELS[0].value == ""
     assert "CLI default" in OPENCODE_MODELS[0].label
+
+
+# ---------------------------------------------------------------------------
+# Subprocess env forwarding — OPENCODE_ prefix must be forwarded
+# ---------------------------------------------------------------------------
+
+
+def test_opencode_prefix_forwarded_to_subprocess() -> None:
+    """OPENCODE_* environment variables should be forwarded via blanket prefix allowlist."""
+    from app.integrations.llm_cli.runner import _build_subprocess_env
+
+    with patch.dict(
+        os.environ,
+        {
+            "OPENCODE_MODEL": "openai/gpt-5.4-mini",
+            "OPENCODE_BIN": "/custom/bin/opencode",
+            "OPENCODE_CONFIG": "/custom/config.json",
+        },
+        clear=False,
+    ):
+        env = _build_subprocess_env(None)
+
+    assert env["OPENCODE_MODEL"] == "openai/gpt-5.4-mini"
+    assert env["OPENCODE_BIN"] == "/custom/bin/opencode"
+    assert env["OPENCODE_CONFIG"] == "/custom/config.json"
+
+
+def test_non_opencode_vars_not_forwarded() -> None:
+    """Only OPENCODE_* vars should be forwarded, not arbitrary vars."""
+    from app.integrations.llm_cli.runner import _build_subprocess_env
+
+    with patch.dict(
+        os.environ,
+        {
+            "OPENCODE_MODEL": "test-model",
+            "RANDOM_VAR": "should-not-forward",
+            "AWS_SECRET_KEY": "should-not-forward",
+            "MY_CONFIG": "should-not-forward",
+        },
+        clear=False,
+    ):
+        env = _build_subprocess_env(None)
+
+    assert env["OPENCODE_MODEL"] == "test-model"
+    assert "RANDOM_VAR" not in env
+    assert "AWS_SECRET_KEY" not in env
+    assert "MY_CONFIG" not in env
+
+
+def test_adapter_build_does_not_need_to_forward_opencode_vars() -> None:
+    """OpenCode adapter should NOT manually forward OPENCODE_* vars (runner handles it)."""
+    with patch.dict(
+        os.environ,
+        {
+            "OPENCODE_MODEL": "openai/gpt-5.4-mini",
+            "OPENCODE_CONFIG": "/custom/config.json",
+        },
+        clear=False,
+    ), patch(
+        "app.integrations.llm_cli.binary_resolver.shutil.which",
+        return_value="/usr/bin/opencode",
+    ):
+        inv = OpenCodeAdapter().build(prompt="test", model=None, workspace=".")
+
+        assert "OPENCODE_MODEL" not in inv.env
+        assert "OPENCODE_CONFIG" not in inv.env
+
+        assert inv.env.get("NO_COLOR") == "1"
