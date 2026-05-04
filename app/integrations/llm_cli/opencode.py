@@ -63,6 +63,8 @@ def _classify_opencode_auth() -> tuple[bool | None, str]:
                             False,
                             f"No valid credentials in {creds_path}. Run: opencode auth login",
                         )
+                else:
+                    return None, f"Unexpected format in {creds_path}: not a JSON object"
         except (OSError, json.JSONDecodeError) as e:
             return None, f"Could not read {creds_path}: {e}"
 

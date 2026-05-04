@@ -145,6 +145,48 @@ def test_classify_auth_with_malformed_json(tmp_path: Path) -> None:
     assert "Could not read" in detail
 
 
+def test_classify_auth_with_non_dict_json(tmp_path: Path) -> None:
+    """Should return None when auth.json contains non-dict JSON (e.g., null, [])."""
+    creds_path = tmp_path / ".local" / "share" / "opencode" / "auth.json"
+    creds_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Test with null
+    creds_path.write_text("null")
+    with patch(
+        "app.integrations.llm_cli.opencode._get_opencode_creds_path", return_value=creds_path
+    ):
+        logged_in, detail = _classify_opencode_auth()
+    assert logged_in is None
+    assert "Unexpected format" in detail
+
+    # Test with empty array
+    creds_path.write_text("[]")
+    with patch(
+        "app.integrations.llm_cli.opencode._get_opencode_creds_path", return_value=creds_path
+    ):
+        logged_in, detail = _classify_opencode_auth()
+    assert logged_in is None
+    assert "Unexpected format" in detail
+
+    # Test with number
+    creds_path.write_text("42")
+    with patch(
+        "app.integrations.llm_cli.opencode._get_opencode_creds_path", return_value=creds_path
+    ):
+        logged_in, detail = _classify_opencode_auth()
+    assert logged_in is None
+    assert "Unexpected format" in detail
+
+    # Test with string
+    creds_path.write_text('"hello"')
+    with patch(
+        "app.integrations.llm_cli.opencode._get_opencode_creds_path", return_value=creds_path
+    ):
+        logged_in, detail = _classify_opencode_auth()
+    assert logged_in is None
+    assert "Unexpected format" in detail
+
+
 # ---------------------------------------------------------------------------
 # detect() tests
 # ---------------------------------------------------------------------------
@@ -622,16 +664,19 @@ def test_non_opencode_vars_not_forwarded() -> None:
 
 def test_adapter_build_does_not_need_to_forward_opencode_vars() -> None:
     """OpenCode adapter should NOT manually forward OPENCODE_* vars (runner handles it)."""
-    with patch.dict(
-        os.environ,
-        {
-            "OPENCODE_MODEL": "openai/gpt-5.4-mini",
-            "OPENCODE_CONFIG": "/custom/config.json",
-        },
-        clear=False,
-    ), patch(
-        "app.integrations.llm_cli.binary_resolver.shutil.which",
-        return_value="/usr/bin/opencode",
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "OPENCODE_MODEL": "openai/gpt-5.4-mini",
+                "OPENCODE_CONFIG": "/custom/config.json",
+            },
+            clear=False,
+        ),
+        patch(
+            "app.integrations.llm_cli.binary_resolver.shutil.which",
+            return_value="/usr/bin/opencode",
+        ),
     ):
         inv = OpenCodeAdapter().build(prompt="test", model=None, workspace=".")
 
