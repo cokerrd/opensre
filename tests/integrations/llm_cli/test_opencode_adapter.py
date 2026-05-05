@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import json
 import os
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from app.integrations.llm_cli.binary_resolver import npm_prefix_bin_dirs
 from app.integrations.llm_cli.opencode import (
     OpenCodeAdapter,
-    _classify_opencode_auth,
     _fallback_opencode_paths,
-    _get_opencode_creds_path,
+    _parse_opencode_auth_list_output,
+    _probe_opencode_auth_via_cli,
 )
 
 
@@ -22,169 +22,110 @@ def _posix_path_set(paths: list[str]) -> set[str]:
 
 
 # ---------------------------------------------------------------------------
-# Credentials path tests (same XDG path on all OSes)
+# `opencode auth list` output parsing (multi-provider: file + env)
 # ---------------------------------------------------------------------------
 
 
-def test_get_creds_path_respects_xdg_data_home() -> None:
-    """Should use XDG_DATA_HOME when set (universal across all OSes)."""
-    with patch.dict(os.environ, {"XDG_DATA_HOME": "/custom/xdg/data"}, clear=False):
-        path = _get_opencode_creds_path()
-
-    assert path == Path("/custom/xdg/data/opencode/auth.json")
-
-
-def test_get_creds_path_default() -> None:
-    """Should default to ~/.local/share/opencode/auth.json on all platforms."""
-    with patch.dict(os.environ, {}, clear=False):
-        path = _get_opencode_creds_path()
-
-    # Path.home() works cross-platform: Linux/macOS -> /home/user, Windows -> C:\Users\User
-    assert path == Path.home() / ".local" / "share" / "opencode" / "auth.json"
-
-
-# ---------------------------------------------------------------------------
-# Auth classification tests
-# ---------------------------------------------------------------------------
-
-
-def test_classify_auth_with_valid_credentials(tmp_path: Path) -> None:
-    """Should return True when auth.json has valid provider credentials."""
-    creds_path = tmp_path / ".local" / "share" / "opencode" / "auth.json"
-    creds_path.parent.mkdir(parents=True, exist_ok=True)
-
-    auth_data = {
-        "anthropic": {"type": "api", "key": "sk-ant-real-key-12345"},
-        "openai": {"type": "api", "key": "sk-proj-real-key-67890"},
-    }
-    creds_path.write_text(json.dumps(auth_data))
-
-    with patch(
-        "app.integrations.llm_cli.opencode._get_opencode_creds_path", return_value=creds_path
-    ):
-        logged_in, detail = _classify_opencode_auth()
-
+def test_parse_auth_list_file_credentials_only() -> None:
+    raw = """
+┌  Credentials ~/.local/share/opencode/auth.json
+│
+●  OpenCode Go api
+│
+└  1 credentials
+"""
+    logged_in, detail = _parse_opencode_auth_list_output(raw, "")
     assert logged_in is True
-    assert "Authenticated" in detail
+    assert "1 credential group" in detail
 
 
-def test_classify_auth_with_single_provider(tmp_path: Path) -> None:
-    """Should return True when auth.json has at least one valid provider."""
-    creds_path = tmp_path / ".local" / "share" / "opencode" / "auth.json"
-    creds_path.parent.mkdir(parents=True, exist_ok=True)
+def test_parse_auth_list_env_provider_only() -> None:
+    raw = """
+┌  Credentials ~/.local/share/opencode/auth.json
+│
+└  0 credentials
 
-    auth_data = {"anthropic": {"type": "api", "key": "sk-ant-real-key-12345"}}
-    creds_path.write_text(json.dumps(auth_data))
-
-    with patch(
-        "app.integrations.llm_cli.opencode._get_opencode_creds_path", return_value=creds_path
-    ):
-        logged_in, detail = _classify_opencode_auth()
-
+┌  Environment
+│
+●  Anthropic ANTHROPIC_API_KEY
+│
+└  1 environment variable
+"""
+    logged_in, detail = _parse_opencode_auth_list_output(raw, "")
     assert logged_in is True
-    assert "Authenticated" in detail
+    assert "1 environment provider" in detail
 
 
-def test_classify_auth_with_no_credentials_file(tmp_path: Path) -> None:
-    """Should return False when auth.json doesn't exist."""
-    creds_path = tmp_path / ".local" / "share" / "opencode" / "auth.json"
-
-    with patch(
-        "app.integrations.llm_cli.opencode._get_opencode_creds_path", return_value=creds_path
-    ):
-        logged_in, detail = _classify_opencode_auth()
-
+def test_parse_auth_list_fully_unauthenticated() -> None:
+    raw = """
+┌  Credentials ~/.local/share/opencode/auth.json
+│
+└  0 credentials
+"""
+    logged_in, detail = _parse_opencode_auth_list_output(raw, "")
     assert logged_in is False
-    assert "Not authenticated" in detail
+    assert "no file credentials" in detail
 
 
-def test_classify_auth_with_empty_credentials(tmp_path: Path) -> None:
-    """Should return False when auth.json exists but has no keys."""
-    creds_path = tmp_path / ".local" / "share" / "opencode" / "auth.json"
-    creds_path.parent.mkdir(parents=True, exist_ok=True)
-    creds_path.write_text(json.dumps({}))
-
-    with patch(
-        "app.integrations.llm_cli.opencode._get_opencode_creds_path", return_value=creds_path
-    ):
-        logged_in, detail = _classify_opencode_auth()
-
+def test_parse_auth_list_strips_ansi() -> None:
+    raw = "\x1b[0m\n└  \x1b[90m0 credentials\x1b[0m\n"
+    logged_in, detail = _parse_opencode_auth_list_output(raw, "")
     assert logged_in is False
-    assert "No valid credentials" in detail
 
 
-def test_classify_auth_with_empty_key_values(tmp_path: Path) -> None:
-    """Should return False when keys exist but are empty strings."""
-    creds_path = tmp_path / ".local" / "share" / "opencode" / "auth.json"
-    creds_path.parent.mkdir(parents=True, exist_ok=True)
-
-    auth_data = {"anthropic": {"type": "api", "key": ""}, "openai": {"type": "api", "key": ""}}
-    creds_path.write_text(json.dumps(auth_data))
-
-    with patch(
-        "app.integrations.llm_cli.opencode._get_opencode_creds_path", return_value=creds_path
-    ):
-        logged_in, detail = _classify_opencode_auth()
-
-    assert logged_in is False
-    assert "No valid credentials" in detail
+def test_parse_auth_list_plural_environment_variables() -> None:
+    raw = """
+└  0 credentials
+└  2 environment variables
+"""
+    logged_in, detail = _parse_opencode_auth_list_output(raw, "")
+    assert logged_in is True
+    assert "2 environment" in detail
 
 
-def test_classify_auth_with_malformed_json(tmp_path: Path) -> None:
-    """Should return None when auth.json is corrupted (unclear auth state)."""
-    creds_path = tmp_path / ".local" / "share" / "opencode" / "auth.json"
-    creds_path.parent.mkdir(parents=True, exist_ok=True)
-    creds_path.write_text("{invalid json}")
-
-    with patch(
-        "app.integrations.llm_cli.opencode._get_opencode_creds_path", return_value=creds_path
-    ):
-        logged_in, detail = _classify_opencode_auth()
-
+def test_parse_auth_list_missing_credentials_line() -> None:
+    logged_in, detail = _parse_opencode_auth_list_output("no summary here", "")
     assert logged_in is None
-    assert "Could not read" in detail
+    assert "missing credentials summary" in detail
 
 
-def test_classify_auth_with_non_dict_json(tmp_path: Path) -> None:
-    """Should return None when auth.json contains non-dict JSON (e.g., null, [])."""
-    creds_path = tmp_path / ".local" / "share" / "opencode" / "auth.json"
-    creds_path.parent.mkdir(parents=True, exist_ok=True)
+@patch("app.integrations.llm_cli.opencode.subprocess.run")
+def test_probe_auth_via_cli_success(mock_run: MagicMock) -> None:
+    proc = MagicMock()
+    proc.returncode = 0
+    proc.stdout = "└  1 credentials\n"
+    proc.stderr = ""
+    mock_run.return_value = proc
 
-    # Test with null
-    creds_path.write_text("null")
-    with patch(
-        "app.integrations.llm_cli.opencode._get_opencode_creds_path", return_value=creds_path
-    ):
-        logged_in, detail = _classify_opencode_auth()
+    logged_in, detail = _probe_opencode_auth_via_cli("/bin/opencode")
+    assert logged_in is True
+    mock_run.assert_called_once()
+    call_kw = mock_run.call_args.kwargs
+    assert call_kw["env"]["NO_COLOR"] == "1"
+    argv = mock_run.call_args[0][0]
+    assert argv == ["/bin/opencode", "auth", "list"]
+
+
+@patch("app.integrations.llm_cli.opencode.subprocess.run")
+def test_probe_auth_via_cli_nonzero_exit(mock_run: MagicMock) -> None:
+    proc = MagicMock()
+    proc.returncode = 2
+    proc.stdout = ""
+    proc.stderr = "boom"
+    mock_run.return_value = proc
+
+    logged_in, detail = _probe_opencode_auth_via_cli("/bin/opencode")
     assert logged_in is None
-    assert "Unexpected format" in detail
+    assert "failed" in detail.lower()
 
-    # Test with empty array
-    creds_path.write_text("[]")
-    with patch(
-        "app.integrations.llm_cli.opencode._get_opencode_creds_path", return_value=creds_path
-    ):
-        logged_in, detail = _classify_opencode_auth()
-    assert logged_in is None
-    assert "Unexpected format" in detail
 
-    # Test with number
-    creds_path.write_text("42")
-    with patch(
-        "app.integrations.llm_cli.opencode._get_opencode_creds_path", return_value=creds_path
-    ):
-        logged_in, detail = _classify_opencode_auth()
-    assert logged_in is None
-    assert "Unexpected format" in detail
+@patch("app.integrations.llm_cli.opencode.subprocess.run")
+def test_probe_auth_via_cli_timeout(mock_run: MagicMock) -> None:
+    mock_run.side_effect = subprocess.TimeoutExpired(cmd=["x"], timeout=1.0)
 
-    # Test with string
-    creds_path.write_text('"hello"')
-    with patch(
-        "app.integrations.llm_cli.opencode._get_opencode_creds_path", return_value=creds_path
-    ):
-        logged_in, detail = _classify_opencode_auth()
+    logged_in, detail = _probe_opencode_auth_via_cli("/bin/opencode")
     assert logged_in is None
-    assert "Unexpected format" in detail
+    assert "timed out" in detail.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -209,7 +150,7 @@ def test_detect_installed_and_authenticated(mock_which: MagicMock, mock_run: Mag
     mock_run.return_value = _version_proc()
 
     with patch(
-        "app.integrations.llm_cli.opencode._classify_opencode_auth",
+        "app.integrations.llm_cli.opencode._probe_opencode_auth_via_cli",
         return_value=(True, "Authenticated"),
     ):
         probe = OpenCodeAdapter().detect()
@@ -228,7 +169,7 @@ def test_detect_installed_not_authenticated(mock_which: MagicMock, mock_run: Mag
     mock_run.return_value = _version_proc()
 
     with patch(
-        "app.integrations.llm_cli.opencode._classify_opencode_auth",
+        "app.integrations.llm_cli.opencode._probe_opencode_auth_via_cli",
         return_value=(False, "Not authenticated"),
     ):
         probe = OpenCodeAdapter().detect()
@@ -478,7 +419,7 @@ def test_detect_uses_opencode_bin_env(tmp_path: Path) -> None:
     ):
         mock_run.return_value = _version_proc()
         with patch(
-            "app.integrations.llm_cli.opencode._classify_opencode_auth", return_value=(True, "ok")
+            "app.integrations.llm_cli.opencode._probe_opencode_auth_via_cli", return_value=(True, "ok")
         ):
             probe = OpenCodeAdapter().detect()
 
@@ -496,7 +437,7 @@ def test_detect_falls_back_when_bin_env_invalid(mock_which: MagicMock, mock_run:
     with (
         patch.dict(os.environ, {"OPENCODE_BIN": "/does/not/exist/opencode"}, clear=False),
         patch(
-            "app.integrations.llm_cli.opencode._classify_opencode_auth", return_value=(True, "ok")
+            "app.integrations.llm_cli.opencode._probe_opencode_auth_via_cli", return_value=(True, "ok")
         ),
     ):
         probe = OpenCodeAdapter().detect()

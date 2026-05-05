@@ -1656,6 +1656,7 @@ def _run_cli_llm_onboarding(provider: ProviderOption) -> Literal["ok", "abort", 
             if action == "repick":
                 return "repick"
             continue
+        _console.print(f"[yellow]{probe.detail}[/]")
         action = _choose(
             f"{provider.label} not found. What next?",
             [

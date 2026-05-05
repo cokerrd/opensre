@@ -84,13 +84,17 @@ Recommended probe sequence (mirrors Codex):
 
 See `_classify_codex_auth` in `codex.py` for a complete reference implementation.
 
+**OpenCode** is multi-provider: users may rely on `auth.json`, environment API keys, or both.
+Run `opencode auth list` after `--version` and parse the reported credential/environment
+counts so detection matches the CLI (do not infer auth from the JSON file alone).
+
 ## Subprocess environment allowlist
 
 `CLIBackedLLMClient` passes only a safe subset of env vars to the subprocess via
 `build_cli_subprocess_env` in `subprocess_env.py` (`_SAFE_SUBPROCESS_ENV_KEYS` +
 `_SAFE_SUBPROCESS_ENV_PREFIXES`).
 
-The current prefix allowlist includes `CODEX_`, `CURSOR_`, `CLAUDE_`, and locale keys (`LC_`).
+The current prefix allowlist includes `CODEX_`, `CURSOR_`, `CLAUDE_`, `OPENCODE_`, and locale keys (`LC_`).
 
 **If your CLI reads custom env vars** (e.g. `GEMINI_*`) you must add the
 relevant prefix to `_SAFE_SUBPROCESS_ENV_PREFIXES` in `subprocess_env.py`, otherwise the

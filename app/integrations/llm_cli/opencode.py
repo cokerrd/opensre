@@ -1,12 +1,16 @@
-"""OpenCode CLI adapter (`opencode run`, non-interactive / one-shot mode)."""
+"""OpenCode CLI adapter (`opencode run`, non-interactive / one-shot mode).
+
+OpenCode can authenticate via multiple mechanisms (credentials in ``auth.json`` and/or
+provider API keys visible in the process environment). We probe auth the same way the
+CLI summarizes it: ``opencode auth list`` (alias: ``opencode providers list``), after a
+successful ``--version`` check. See ``_parse_opencode_auth_list_output`` for parsing rules.
+"""
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import subprocess
-from pathlib import Path
 
 from app.integrations.llm_cli.base import CLIInvocation, CLIProbe
 from app.integrations.llm_cli.binary_resolver import (
@@ -20,7 +24,9 @@ from app.integrations.llm_cli.binary_resolver import (
 )
 
 _OPENCODE_VERSION_RE = re.compile(r"(\d+\.\d+\.\d+)")
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 _PROBE_TIMEOUT_SEC = 8.0
+_AUTH_LIST_TIMEOUT_SEC = 25.0
 
 
 def _parse_semver(text: str) -> str | None:
@@ -28,47 +34,79 @@ def _parse_semver(text: str) -> str | None:
     return m.group(1) if m else None
 
 
-def _get_opencode_creds_path() -> Path:
-    """Return path to OpenCode's auth.json on all platforms."""
-    # Respect XDG_DATA_HOME if set, otherwise use default
-    xdg_data_home = os.environ.get("XDG_DATA_HOME")
-    if xdg_data_home:
-        base = Path(xdg_data_home)
-    else:
-        base = Path.home() / ".local" / "share"
-
-    return base / "opencode" / "auth.json"
+def _strip_ansi(text: str) -> str:
+    return _ANSI_ESCAPE.sub("", text)
 
 
-def _classify_opencode_auth() -> tuple[bool | None, str]:
-    """Return (logged_in, detail) by checking OpenCode's credential store."""
-    creds_path = _get_opencode_creds_path()
+def _parse_opencode_auth_list_output(raw_stdout: str, raw_stderr: str) -> tuple[bool | None, str]:
+    """Map ``opencode auth list`` output to ``logged_in`` + human detail.
 
-    if creds_path.exists():
-        try:
-            with open(creds_path) as f:
-                data = json.load(f)
+    OpenCode prints a summary table (file-backed credentials under ``auth.json`` and
+    optional environment-backed provider keys). We require a ``<n> credentials`` line;
+    ``<n> environment variable(s)`` is optional and defaults to 0 when absent.
+    """
+    combined = _strip_ansi((raw_stdout or "") + "\n" + (raw_stderr or ""))
+    cred_m = re.search(r"(\d+)\s+credentials\b", combined)
+    if not cred_m:
+        tail = combined.strip()[-400:]
+        return (
+            None,
+            "Could not parse `opencode auth list` output (missing credentials summary)."
+            + (f" Tail: {tail!r}" if tail else ""),
+        )
 
-                if isinstance(data, dict):
-                    # Check if any provider has a non-empty key field
-                    has_credentials = any(
-                        isinstance(creds, dict) and bool(creds.get("key", "").strip())
-                        for creds in data.values()
-                    )
+    creds = int(cred_m.group(1))
+    env_m = re.search(r"(\d+)\s+environment variables?\b", combined)
+    envs = int(env_m.group(1)) if env_m else 0
 
-                    if has_credentials:
-                        return True, f"Authenticated via {creds_path}"
-                    else:
-                        return (
-                            False,
-                            f"No valid credentials in {creds_path}. Run: opencode auth login",
-                        )
-                else:
-                    return None, f"Unexpected format in {creds_path}: not a JSON object"
-        except (OSError, json.JSONDecodeError) as e:
-            return None, f"Could not read {creds_path}: {e}"
+    if creds >= 1 or envs >= 1:
+        parts: list[str] = []
+        if creds >= 1:
+            parts.append(f"{creds} credential group(s) in auth store")
+        if envs >= 1:
+            parts.append(f"{envs} environment provider key(s)")
+        return True, "OpenCode: " + "; ".join(parts) + ". (See `opencode auth list`.)"
 
-    return False, f"Not authenticated. Run: opencode auth login (creates {creds_path})"
+    return (
+        False,
+        "OpenCode reports no file credentials and no provider keys in environment. "
+        "Run: opencode auth login — or export a supported provider API key.",
+    )
+
+
+def _probe_opencode_auth_via_cli(binary_path: str) -> tuple[bool | None, str]:
+    """Run ``opencode auth list`` with the same environment as the parent process.
+
+    Inherits the full environment so the CLI can detect API keys (e.g. ``ANTHROPIC_API_KEY``)
+    the same way it does interactively. Uses ``NO_COLOR=1`` to simplify parsing.
+    """
+    env = os.environ.copy()
+    env["NO_COLOR"] = "1"
+
+    try:
+        list_proc = subprocess.run(
+            [binary_path, "auth", "list"],
+            capture_output=True,
+            text=True,
+            timeout=_AUTH_LIST_TIMEOUT_SEC,
+            check=False,
+            env=env,
+        )
+    except subprocess.TimeoutExpired:
+        return (
+            None,
+            "`opencode auth list` timed out (first run can migrate local data). "
+            "Retry once OpenCode finishes initializing.",
+        )
+    except OSError as exc:
+        return None, f"Could not run `opencode auth list`: {exc}"
+
+    if list_proc.returncode != 0:
+        err = _strip_ansi((list_proc.stderr or list_proc.stdout or "").strip())
+        tail = (err or f"exit {list_proc.returncode}")[:400]
+        return None, f"`opencode auth list` failed (exit {list_proc.returncode}): {tail}"
+
+    return _parse_opencode_auth_list_output(list_proc.stdout, list_proc.stderr)
 
 
 def _fallback_opencode_paths() -> list[str]:
@@ -83,7 +121,7 @@ class OpenCodeAdapter:
     install_hint = (
         "brew install anomalyco/tap/opencode  (macOS/Linux) | choco install opencode (Windows)"
     )
-    auth_hint = "Run: opencode auth login (interactive, configures your LLM provider)"
+    auth_hint = "Run: opencode auth login (interactive) or configure provider API keys / auth.json"
     min_version: str | None = None
     default_exec_timeout_sec = 120.0
 
@@ -123,7 +161,7 @@ class OpenCodeAdapter:
             )
 
         version = _parse_semver(ver_proc.stdout + ver_proc.stderr)
-        logged_in, auth_detail = _classify_opencode_auth()
+        logged_in, auth_detail = _probe_opencode_auth_via_cli(binary_path)
 
         return CLIProbe(
             installed=True,
