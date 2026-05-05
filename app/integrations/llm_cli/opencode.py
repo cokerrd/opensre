@@ -22,6 +22,10 @@ from app.integrations.llm_cli.binary_resolver import (
 from app.integrations.llm_cli.binary_resolver import (
     resolve_cli_binary,
 )
+from app.integrations.llm_cli.env_overrides import (
+    HTTP_LLM_PROVIDER_ENV_KEYS,
+    nonempty_env_values,
+)
 
 _OPENCODE_VERSION_RE = re.compile(r"(\d+\.\d+\.\d+)")
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
@@ -205,9 +209,8 @@ class OpenCodeAdapter:
         if resolved_model:
             argv.extend(["-m", resolved_model])
 
-        # OpenCode doesn't use API keys in env; auth is from pre-configured credentials
-        # Only forward proxy settings if needed
         env: dict[str, str] = {"NO_COLOR": "1"}
+        env.update(nonempty_env_values(HTTP_LLM_PROVIDER_ENV_KEYS))
         for key in ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"):
             val = os.environ.get(key, "").strip()
             if val:

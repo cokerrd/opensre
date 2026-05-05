@@ -303,6 +303,21 @@ def test_build_sets_no_color_env(mock_which: MagicMock) -> None:
 
 
 @patch("app.integrations.llm_cli.binary_resolver.shutil.which", return_value="/usr/bin/opencode")
+def test_build_forwards_http_llm_env_when_set(mock_which: MagicMock) -> None:
+    """Should mirror ``opencode auth list`` env-backed credentials into invocation overrides."""
+    with patch.dict(
+        os.environ,
+        {"ANTHROPIC_API_KEY": "sk-ant-test", "OPENAI_PROJECT_ID": "proj-1"},
+        clear=False,
+    ):
+        inv = OpenCodeAdapter().build(prompt="p", model=None, workspace="")
+
+    assert inv.env is not None
+    assert inv.env.get("ANTHROPIC_API_KEY") == "sk-ant-test"
+    assert inv.env.get("OPENAI_PROJECT_ID") == "proj-1"
+
+
+@patch("app.integrations.llm_cli.binary_resolver.shutil.which", return_value="/usr/bin/opencode")
 def test_build_forwards_proxy_env_vars(mock_which: MagicMock) -> None:
     """Should forward proxy environment variables to subprocess."""
     with patch.dict(
