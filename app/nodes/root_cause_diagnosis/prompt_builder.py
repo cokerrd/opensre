@@ -1,5 +1,6 @@
 """Prompt construction for root cause diagnosis."""
 
+import datetime
 import json
 from typing import Any
 
@@ -531,8 +532,19 @@ def _build_evidence_sections(
         sections.append(section)
 
     # Grafana metrics
+    grafana_metric_summaries = evidence.get("grafana_metric_summaries", [])
     grafana_metrics = evidence.get("grafana_metrics", [])
-    if grafana_metrics:
+    if grafana_metric_summaries:
+        metric_name = evidence.get("grafana_metric_name", "unknown")
+        section = f"\nGrafana Metrics ({metric_name}):\n"
+        for metric in grafana_metric_summaries[:8]:
+            if not isinstance(metric, dict):
+                continue
+            summary = metric.get("summary")
+            if summary:
+                section += f"- {summary}\n"
+        sections.append(section)
+    elif grafana_metrics:
         metric_name = evidence.get("grafana_metric_name", "unknown")
         section = f"\nGrafana Metrics ({metric_name}):\n"
         for metric in grafana_metrics[:5]:
@@ -744,9 +756,15 @@ def _build_performance_insights_section(performance_insights: dict[str, Any]) ->
         for item in top_sql[:5]:
             if not isinstance(item, dict):
                 continue
-            sql = str(item.get("sql", ""))[:180]
-            db_load = item.get("db_load")
+            sql = str(item.get("sql") or item.get("statement") or "")[:180]
+            db_load = item.get("db_load", item.get("db_load_avg"))
             wait_event = item.get("wait_event")
+            if not wait_event and isinstance(item.get("wait_events"), list):
+                wait_event = ", ".join(
+                    str(wait.get("name", "unknown"))
+                    for wait in item.get("wait_events", [])[:3]
+                    if isinstance(wait, dict)
+                )
             section += f"- sql={sql}"
             if db_load is not None:
                 section += f" | db_load={db_load}"
@@ -965,8 +983,6 @@ def _format_datadog_log_entry(log: Any) -> str:
         time_part = raw_ts.split("T", 1)[1][:8]  # "HH:MM:SS"
         ts_prefix = f"[{time_part}] "
     elif isinstance(raw_ts, int | float):
-        import datetime
-
         ts_prefix = f"[{datetime.datetime.utcfromtimestamp(raw_ts / 1000 if raw_ts > 1e10 else raw_ts).strftime('%H:%M:%S')}] "
 
     tag_parts: dict[str, str] = {}

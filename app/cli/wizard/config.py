@@ -16,6 +16,7 @@ from app.config import (
     NVIDIA_REASONING_MODEL,
     OPENAI_REASONING_MODEL,
     OPENROUTER_REASONING_MODEL,
+    REQUESTY_REASONING_MODEL,
 )
 from app.integrations.llm_cli.base import LLMCLIAdapter
 
@@ -46,6 +47,10 @@ class ProviderOption:
     models: tuple[ModelOption, ...]
     #: If set, ``sync_provider_env`` also writes this key (same value) for legacy .env files.
     legacy_model_env: str | None = None
+    #: Env var that holds the *toolcall* model for this provider. ``None`` for
+    #: providers that don't expose a separate toolcall model (e.g. CLI-backed
+    #: providers like ``codex``/``claude-code``, or Ollama).
+    toolcall_model_env: str | None = None
     #: Human-readable name for the credential requested during onboarding. Most
     #: providers want an API key; Ollama wants a host URL. Used as the wizard
     #: prompt label, e.g. ``{label} {credential_label} ({api_key_env})``.
@@ -107,6 +112,22 @@ OPENROUTER_MODELS = (
     ModelOption(value="minimax/minimax-m2", label="MiniMax M2 (via OpenRouter)"),
     ModelOption(value="deepseek/deepseek-v3.2", label="DeepSeek V3.2 (via OpenRouter)"),
     ModelOption(value="qwen/qwen-3.6-plus-preview", label="Qwen 3.6 Plus (via OpenRouter)"),
+)
+
+REQUESTY_MODELS = (
+    ModelOption(value=REQUESTY_REASONING_MODEL, label="Claude Sonnet 4.6 (via Requesty)"),
+    ModelOption(value="bedrock/claude-opus-4-7", label="Claude Opus 4.7 Bedrock (via Requesty)"),
+    ModelOption(
+        value="bedrock/claude-sonnet-4-6", label="Claude Sonnet 4.6 Bedrock (via Requesty)"
+    ),
+    ModelOption(value="openai/gpt-5.5", label="GPT-5.5 (via Requesty)"),
+    ModelOption(
+        value="vertex/gemini-3.1-pro-preview", label="Gemini 3.1 Pro (preview, via Requesty)"
+    ),
+    ModelOption(
+        value="vertex/gemini-3.1-flash-lite-preview",
+        label="Gemini 3.1 Flash-Lite (preview, via Requesty)",
+    ),
 )
 
 GEMINI_MODELS = (
@@ -185,10 +206,28 @@ OPENCODE_MODELS = (
 )
 
 
+CURSOR_MODELS = (
+    ModelOption(
+        value="",
+        label="CLI default (no --model; use Cursor configured model)",
+    ),
+    ModelOption(value="auto", label="auto"),
+    ModelOption(value="gpt-5", label="gpt-5"),
+    ModelOption(value="sonnet-4", label="sonnet-4"),
+    ModelOption(value="sonnet-4-thinking", label="sonnet-4-thinking"),
+)
+
+
 def _codex_adapter_factory() -> LLMCLIAdapter:
     from app.integrations.llm_cli.codex import CodexAdapter
 
     return CodexAdapter()
+
+
+def _cursor_adapter_factory() -> LLMCLIAdapter:
+    from app.integrations.llm_cli.cursor import CursorAdapter
+
+    return CursorAdapter()
 
 
 def _claude_code_adapter_factory() -> LLMCLIAdapter:
@@ -213,6 +252,7 @@ SUPPORTED_PROVIDERS = (
         default_model=ANTHROPIC_REASONING_MODEL,
         models=ANTHROPIC_MODELS,
         legacy_model_env="ANTHROPIC_MODEL",
+        toolcall_model_env="ANTHROPIC_TOOLCALL_MODEL",
     ),
     ProviderOption(
         value="openai",
@@ -223,6 +263,7 @@ SUPPORTED_PROVIDERS = (
         default_model=OPENAI_REASONING_MODEL,
         models=OPENAI_MODELS,
         legacy_model_env="OPENAI_MODEL",
+        toolcall_model_env="OPENAI_TOOLCALL_MODEL",
     ),
     ProviderOption(
         value="openrouter",
@@ -233,6 +274,17 @@ SUPPORTED_PROVIDERS = (
         default_model=OPENROUTER_REASONING_MODEL,
         models=OPENROUTER_MODELS,
         legacy_model_env="OPENROUTER_MODEL",
+        toolcall_model_env="OPENROUTER_TOOLCALL_MODEL",
+    ),
+    ProviderOption(
+        value="requesty",
+        label="Requesty",
+        group="Hosted providers",
+        api_key_env="REQUESTY_API_KEY",
+        model_env="REQUESTY_REASONING_MODEL",
+        default_model=REQUESTY_REASONING_MODEL,
+        models=REQUESTY_MODELS,
+        legacy_model_env="REQUESTY_MODEL",
     ),
     ProviderOption(
         value="gemini",
@@ -243,6 +295,7 @@ SUPPORTED_PROVIDERS = (
         default_model=GEMINI_REASONING_MODEL,
         models=GEMINI_MODELS,
         legacy_model_env="GEMINI_MODEL",
+        toolcall_model_env="GEMINI_TOOLCALL_MODEL",
     ),
     ProviderOption(
         value="nvidia",
@@ -253,6 +306,7 @@ SUPPORTED_PROVIDERS = (
         default_model=NVIDIA_REASONING_MODEL,
         models=NVIDIA_MODELS,
         legacy_model_env="NVIDIA_MODEL",
+        toolcall_model_env="NVIDIA_TOOLCALL_MODEL",
     ),
     ProviderOption(
         value="codex",
@@ -265,6 +319,18 @@ SUPPORTED_PROVIDERS = (
         credential_kind="cli",
         credential_secret=False,
         adapter_factory=_codex_adapter_factory,
+    ),
+    ProviderOption(
+        value="cursor",
+        label="Cursor Agent CLI",
+        group="Local CLI providers",
+        api_key_env="",
+        model_env="CURSOR_MODEL",
+        default_model="auto",
+        models=CURSOR_MODELS,
+        credential_kind="cli",
+        credential_secret=False,
+        adapter_factory=_cursor_adapter_factory,
     ),
     ProviderOption(
         value="claude-code",
