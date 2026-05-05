@@ -419,7 +419,8 @@ def test_detect_uses_opencode_bin_env(tmp_path: Path) -> None:
     ):
         mock_run.return_value = _version_proc()
         with patch(
-            "app.integrations.llm_cli.opencode._probe_opencode_auth_via_cli", return_value=(True, "ok")
+            "app.integrations.llm_cli.opencode._probe_opencode_auth_via_cli",
+            return_value=(True, "ok"),
         ):
             probe = OpenCodeAdapter().detect()
 
@@ -437,7 +438,8 @@ def test_detect_falls_back_when_bin_env_invalid(mock_which: MagicMock, mock_run:
     with (
         patch.dict(os.environ, {"OPENCODE_BIN": "/does/not/exist/opencode"}, clear=False),
         patch(
-            "app.integrations.llm_cli.opencode._probe_opencode_auth_via_cli", return_value=(True, "ok")
+            "app.integrations.llm_cli.opencode._probe_opencode_auth_via_cli",
+            return_value=(True, "ok"),
         ),
     ):
         probe = OpenCodeAdapter().detect()
