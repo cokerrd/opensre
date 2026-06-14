@@ -39,8 +39,15 @@
             "group": "First steps",
             "pages": [
               "quickstart",
+              "investigation-overview",
               "deployment",
               "faq"
+            ]
+          },
+          {
+            "group": "Benchmark",
+            "pages": [
+              "cloudopsbench"
             ]
           },
           {
